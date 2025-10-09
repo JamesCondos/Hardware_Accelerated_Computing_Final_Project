@@ -1,6 +1,6 @@
 #include "srcnn.h"
 
-// implements conv1 layer of SRCNN
+// implements conv1 layer of SRCNN does fetch and extraction
 void conv1(ftmap_t input_ftmap[N0][H][W],
            param_t conv1_weights[N1][N0][F1][F1], //F1 = 9 therefore we have 9x9 filter kernel
            param_t conv1_biases[N1],
@@ -23,9 +23,19 @@ void conv1(ftmap_t input_ftmap[N0][H][W],
 							//perform convolution of input image pixel areal with the kernel image and place
 							//in the current output feature map position based on outermost loops
 							output_ftmap[n][h][w] += conv1_weights[n][k][i][j] * input_ftmap[k][h+i][w+j];
+
+							//for padding check if filter kenrel [k i j] is within  input ft map[k h w]
+							//use if else, types of padding
+							//zero padding means if u set the outpuit ftmap to 0 or do the convolution above
+							//zero padding backup (inaccuracies)
+							//preferred is interpolated padding
 						}
 					}
 				}
+				if outputfile <= 0
+					outfile = 0
+					else
+					outfile = outfile +
 			}
 		}
 	}

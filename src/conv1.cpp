@@ -35,7 +35,7 @@ void conv1(ftmap_t input_ftmap[N0][H][W],
 				if outputfile <= 0
 					outfile = 0
 					else
-					outfile = outfile +
+					outfile = outfile + conv1_biases[n];
 			}
 		}
 	}

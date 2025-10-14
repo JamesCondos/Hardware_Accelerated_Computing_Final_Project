@@ -1,0 +1,27 @@
+INFO: [SIM 2] *************** CSIM start ***************
+INFO: [SIM 4] CSIM will launch GCC as the compiler.
+   Compiling ../../../../src/conv1.cpp in debug mode
+   Generating csim.exe
+***** CONV1 Golden Reference *****
+  - Butterfly MSE: 3.8672e-015
+
+***** SRCNN Golden Reference *****
+  - Butterfly MSE: 0.27515
+
+***** SRCNN - Set14 Test *****
+Image Name     PSNR GT vs HR (dB)  PSNR GT vs HR MATLAB (dB)  PSNR GT vs LR (dB)  MSE GT vs HR   MSE GT vs HR MATLAB        
+baboon         6.16102             27.9157                    27.3618             0.242046       0.00161402                 
+barbara        5.56792             24.9898                    24.8997             0.277465       0.00316839                 
+bridge         5.94049             26.2451                    25.2317             0.254654       0.00237435                 
+coastguard     6.01363             26.8397                    26.3                0.250401       0.00206895                 
+face           8.80412             33.4187                    32.6794             0.131701       0.000454177                
+flowers        7.13983             27.3319                    25.6995             0.193204       0.00184746                 
+foreman        3.90042             35.727                     33.2014             0.407341       0.000266235                
+lenna          6.03272             30.8413                    29.1689             0.249303       0.000822304                
+man            7.03768             27.1209                    26.0613             0.197802       0.00193996                 
+monarch        5.66056             27.9822                    24.5799             0.271609       0.00159023                 
+pepper         5.41893             33.4745                    32.0454             0.287149       0.000447919                
+ppt3           2.87082             29.4367                    26.6842             0.516319       0.0011378                  
+zebra          6.3457              27.6649                    24.7423             0.231969       0.00171134                 
+INFO: [SIM 1] CSim done with 0 errors.
+INFO: [SIM 3] *************** CSIM finish ***************

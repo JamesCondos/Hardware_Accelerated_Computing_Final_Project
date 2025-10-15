@@ -10,4 +10,9 @@ void srcnn(ftmap_t input_ftmap[N0][H][W],
            ftmap_t output_ftmap[N3][H][W])
 {
     // Implement end-to-end SRCNN here
+	static ftmap_t layer1_output[N1][H][W];
+	static ftmap_t layer2_output[N2][H][W];
+	conv1(input_ftmap, conv1_weights, conv1_biases, layer1_output);
+	conv2(layer1_output, conv2_weights, conv2_biases, layer2_output);
+	conv3(layer2_output, conv3_weights, conv3_biases, output_ftmap);
 }

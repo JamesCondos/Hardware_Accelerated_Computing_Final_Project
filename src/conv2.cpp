@@ -1,37 +1,50 @@
 #include "srcnn.h"
 #include <math.h>
 
-// implements conv2 layer of SRCNN
-void conv2(ftmap_t input_ftmap[N1][H][W],
-		   param_t conv2_weights[N2][N1][F2][F2], //F2 = 1 therefore we have 1x1 filter kernel. This is just a one dimensional convolution over a 2D input feature map
-		   param_t conv2_biases[N2],
-           ftmap_t output_ftmap[N2][H][W])
+//Total BRAM = 2.1 + 0.66 = 2.1
+
+// Conv2: 1x1 kernel (no spatial padding required)
+// Output-stationary tiled convolution
+// Tile size: 51x51 (fits evenly into 255x255 image)
+void conv2(ftmap_t layer1_output_tile[N1][TILE_H][TILE_W],
+           param_t conv2_weights[N2][N1][F2][F2],
+           param_t conv2_biases[N2],
+           ftmap_t layer2_output_tile[N2][TILE_H][TILE_W])
 {
-	//int padding = F2/2; //If we pick a coordinate on the top row of a 9 by 9 grid, we need at least 4 pixels surrounding it
-    //no padding required here because this just uses a 1x1 filter kernal so gives us a 255x255 output as well
+#pragma HLS INLINE off
+    // F2 = 1, so no padding needed
+    const int P = 0;
 
-	for (int out_feat = 0; out_feat < N2; out_feat++) { //Loop over every output feature map
+    // for output tile H x W x N x 32b = (8 x 51 x 51 x 32)/10e6 = 0.66 Mbits < 5.1 Mbits DRAM
 
-			for (int out_feat_y = 0; out_feat_y < H; out_feat_y++) { //Loop over the height of a feature map output
+    // loop over output tile dimensions and initialize with bias
+    for (int out_feat = 0; out_feat < N2; out_feat++) {
+        for (int tile_h = 0; tile_h < TILE_H; tile_h++) {
+            for (int tile_w = 0; tile_w < TILE_W; tile_w++) {
+                layer2_output_tile[out_feat][tile_h][tile_w] = conv2_biases[out_feat];
+            }
+        }
+    }
 
-				for (int out_feat_x = 0; out_feat_x < W; out_feat_x++) { //Loop over the width of a feature map to capture a single pixel
+    // Do 1x1 convolution: multiply corresponding pixels across all input feature maps
+    for (int feat = 0; feat < N2; feat++) {
+        for (int input_feat = 0; input_feat < N1; input_feat++) {
+            for (int th = 0; th < TILE_H; th++) {
+                for (int tw = 0; tw < TILE_W; tw++) {
+                    layer2_output_tile[feat][th][tw] +=
+                        conv2_weights[feat][input_feat][0][0] *
+                        layer1_output_tile[input_feat][th][tw];
+                }
+            }
+        }
 
-
-					/*We have now picked a cell to give output to.
-					 * We must now loop over a kernel and convolve to find the output for this cell
-					 * Remember we must include the bias. each feature map has a single bias
-					 */
-
-				    float feat_bias = conv2_biases[out_feat];
-				    float convolution = 0;
-
-					for (int in_feat = 0; in_feat < N1 ; in_feat++) { //Loop over every input feature map (3 for RGB for example)
-								//int new_ftmap_height = fmin(fmax(out_feat_y + kernel_y - padding, 0), H - 1);
-								//int new_ftmap_width = fmin(fmax(out_feat_x + kernel_x - padding, 0), W - 1);
-								convolution += conv2_weights[out_feat][in_feat][0][0]*input_ftmap[in_feat][out_feat_y][out_feat_x];
-							}
-					output_ftmap[out_feat][out_feat_y][out_feat_x] = fmaxf(0, convolution + feat_bias); //activation function (convolve could be negative)
-				}
-			}
-		}
+        // activation function (ReLU)
+        for (int th = 0; th < TILE_H; th++) {
+            for (int tw = 0; tw < TILE_W; tw++) {
+                if (layer2_output_tile[feat][th][tw] < 0) {
+                    layer2_output_tile[feat][th][tw] = 0;
+                }
+            }
+        }
+    }
 }

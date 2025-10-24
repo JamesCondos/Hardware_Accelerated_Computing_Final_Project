@@ -53,30 +53,35 @@ void conv1(ftmap_t input_ftmap[N0][H][W],
            param_t conv1_biases[N1],
            ftmap_t output_ftmap[N1][H][W]);
 
-void conv1_tile(ftmap_t input_tile[N0][TILE_H][TILE_W],
-           param_t conv1_weights[N1][N0][F1][F1],
-           param_t conv1_biases[N1],
-           ftmap_t layer1_output_tile[N1][TILE_H][TILE_W]);
+void conv1_tile(hls::stream<ftmap_t> &input_tile,
+        param_t conv1_weights[N1][N0][F1][F1],
+        param_t conv1_biases[N1],
+		   hls::stream<ftmap_t> &layer1_output_tile);
 
 
 
-void conv2(ftmap_t layer1_output_tile[N1][TILE_H][TILE_W],
-           param_t conv2_weights[N2][N1][F2][F2],
-           param_t conv2_biases[N2],
-           ftmap_t layer2_output_tile[N2][TILE_H][TILE_W]);
+void conv2(hls::stream<ftmap_t> &layer1_output_tile,
+        param_t conv2_weights[N2][N1][F2][F2],
+        param_t conv2_biases[N2],
+		   hls::stream<ftmap_t> &layer2_output_tile);
 
-void conv3(ftmap_t layer2_output_tile[N2][TILE_H][TILE_W],
-           param_t conv3_weights[N3][N2][F3][F3],
-           param_t conv3_biases[N3],
-           ftmap_t layer3_output_tile[N3][TILE_H][TILE_W]);
+void conv3(hls::stream<ftmap_t> &layer2_output_tile,
+        param_t conv3_weights[N3][N2][F3][F3],
+        param_t conv3_biases[N3],
+		   hls::stream<ftmap_t> &layer3_output_tile);
+
+void tile_shifter(hls::stream<int> &tile_h1, hls::stream<int> &tile_w1,
+		hls::stream<int> &tile_h2, hls::stream<int> &tile_w2);
 
 void input_tiler(ftmap_t input_ftmap[N0][H][W],
-                 ftmap_t input_tile[N0][TILE_H][TILE_W],
-                 int tile_h, int tile_w);
+		 hls::stream<ftmap_t> &input_tile,
+		 hls::stream<int> &tile_h,
+		 hls::stream<int> &tile_w);
 
 void reconstructor(ftmap_t output_ftmap[N3][H][W],
-                   ftmap_t output_tile[N3][TILE_H][TILE_W],
-                   int tile_h, int tile_w);
+		   hls::stream<ftmap_t> &output_tile,
+		   hls::stream<int> &tile_h,
+		   hls::stream<int> &tile_w);
 
 
 

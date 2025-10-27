@@ -1,53 +1,57 @@
 #include "srcnn.h"
+#include "hls_stream.h"
 #include <math.h>
 
-//Total BRAM = 2.1 + 0.66 = 2.1
-
-// Conv1: 9x9 kernel, SAME (replicate) padding
-// Output-stationary and input stationary tiled convolution
-// Tile size: 51x51 (fits evenly into 255x255 image)
-void conv3(ftmap_t layer2_output_tile[N2][TILE_H][TILE_W],
-           param_t conv3_weights[N3][N2][F3][F3],
-           param_t conv3_biases[N3],
-           ftmap_t layer3_output_tile[N3][TILE_H][TILE_W])
+// Conv3: 5x5 kernel, SAME (replicate) padding
+// Output-stationary tiled convolution
+void conv3(
+    hls::stream<ftmap_t> &conv2_to_conv3,
+    param_t conv3_weights[N3][N2][F3][F3],
+    param_t conv3_biases[N3],
+    ftmap_t layer3_output_tile[N3][TILE_H][TILE_W])
 {
-#pragma HLS inline off
-    const int P  = F3 / 2;   // input padding where P = ceil(K/2) where K = 9 i.e kernal dimensions
 
-    //for output tile H x W x N x 32b = (8 x 51 x 51 x 32)/10e6 = 0.66 Mbits < 5.1 Mbits DRAM
+#pragma HLS INLINE off
+#pragma HLS STREAM variable=conv2_to_conv3 depth=512
 
-    //loop over output tile dimensions
-    for (int tile_h = 0; tile_h < TILE_H; tile_h++){
-        for (int tile_w = 0; tile_w < TILE_W; tile_w++){
-            layer3_output_tile[0][tile_h][tile_w] = conv3_biases[0];
+
+    const int P = F3 / 2;
+
+    ftmap_t input_tile[N2][TILE_H][TILE_W];
+
+    // Read input tile from stream
+    for (int feat = 0; feat < N2; feat++) {
+        for (int i = 0; i < TILE_H; i++) {
+            for (int j = 0; j < TILE_W; j++) {
+                input_tile[feat][i][j] = conv2_to_conv3.read();
+            }
         }
     }
 
-   //N0 =1 so we dont even need a loop for our input features this time
-   //so basically we dont even need an input feature tile
-   //Do convolution alongside padding in this section
-   for (int input_feat = 0; input_feat < N2; input_feat++){
-       for (int th = 0; th < TILE_H; th++){
-           for (int tw = 0; tw < TILE_W; tw++){
-               int h = th;
-               int w = tw;
+    // Initialize output with bias:
+    OUT_STATIONARY_CONV3:
+    for (int i = 0; i < TILE_H; i++) {
+        for (int j = 0; j < TILE_W; j++) {
+#pragma HLS PIPELINE II = 1
+            layer3_output_tile[0][i][j] = conv3_biases[0];
+        }
+    }
 
-               // do padding and then do MAC
-               //iterate over kernel height and width
-               for (int kh = 0; kh < F3; kh++){
-                   for (int kw = 0; kw < F3; kw++){
-
-                       //do same padding with edge extension
-                       int pad_h = (int)fminf(fmaxf(h + kh - P, 0),TILE_H - 1);
-                       int pad_w = (int)fminf(fmaxf(w + kw - P, 0),TILE_W - 1);
-
-                       //perform MAC
-                       layer3_output_tile[0][th][tw] +=
-                           conv3_weights[0][input_feat][kh][kw] *
-                           layer2_output_tile[input_feat][pad_h][pad_w];
-                   }
-               }
-           }
-       }
-   }
+    // Perform convolution
+    MAC_CONV3:
+    for (int in_feat = 0; in_feat < N2; in_feat++) {
+        for (int th = 0; th < TILE_H; th++) {
+            for (int tw = 0; tw < TILE_W; tw++) {
+                for (int kh = 0; kh < F3; kh++) {
+                    for (int kw = 0; kw < F3; kw++) {
+                        int pad_h = (int)fminf(fmaxf(th + kh - P, 0), TILE_H - 1);
+                        int pad_w = (int)fminf(fmaxf(tw + kw - P, 0), TILE_W - 1);
+                        layer3_output_tile[0][th][tw] +=
+                            conv3_weights[0][in_feat][kh][kw] *
+                            input_tile[in_feat][pad_h][pad_w];
+                    }
+                }
+            }
+        }
+    }
 }

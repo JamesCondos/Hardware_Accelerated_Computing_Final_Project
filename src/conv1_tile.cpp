@@ -1,61 +1,86 @@
-
 #include "srcnn.h"
+#include "hls_stream.h"
 #include <math.h>
 
-//Total BRAM = 2.1 + 0.66 = 2.1
-
 // Conv1: 9x9 kernel, SAME (replicate) padding
-// Output-stationary and input stationary tiled convolution
-// Tile size: 51x51 (fits evenly into 255x255 image)
-void conv1_tile(ftmap_t input_tile[N0][TILE_H][TILE_W],
-           param_t conv1_weights[N1][N0][F1][F1],
-           param_t conv1_biases[N1],
-           ftmap_t layer1_output_tile[N1][TILE_H][TILE_W])
+// Output-stationary tiled convolution
+void conv1_tile(
+    ftmap_t input_tile[N0][TILE_H][TILE_W],
+    param_t conv1_weights[N1][N0][F1][F1],
+    param_t conv1_biases[N1],
+    hls::stream<ftmap_t> &conv1_to_conv2)
 {
-#pragma HLS inline off
-    const int P  = F1 / 2;   // input padding where P = ceil(K/2) where K = 9 i.e kernal dimensions
+#pragma HLS INLINE off
 
-    //for output tile H x W x N x 32b = (8 x 51 x 51 x 32)/10e6 = 0.66 Mbits < 5.1 Mbits DRAM
 
-    //loop over output tile dimensions
-    for (int out_feat = 0; out_feat < N1; out_feat++){
-    	for (int tile_h = 0; tile_h < TILE_H; tile_h++){
-    		for (int tile_w = 0; tile_w < TILE_W; tile_w++){
-    			layer1_output_tile[out_feat][tile_h][tile_w] = conv1_biases[out_feat];
-    		}
-    	}
 
+#pragma HLS STREAM variable=conv1_to_conv2 depth=512
+
+
+	// array partitioning to allow multiple reads of the arrays
+	//this makes pipelining achieve II = 1
+	//complete input tile partitioning required
+#pragma HLS ARRAY_PARTITION variable=conv1_weights complete dim=3
+#pragma HLS ARRAY_PARTITION variable=conv1_weights complete dim=4
+#pragma HLS ARRAY_PARTITION variable=input_tile complete dim=2
+#pragma HLS ARRAY_PARTITION variable=input_tile complete dim=3
+#pragma HLS ARRAY_PARTITION variable=conv1_biases complete dim=1
+
+
+    const int P = F1 / 2;
+
+
+    ftmap_t layer1_output_tile[N1][TILE_H][TILE_W];
+
+#pragma HLS ARRAY_PARTITION variable=layer1_output_tile complete dim=1
+
+
+    // Initialize with bias
+    OUT_STATIONARY_CONV1:
+    for (int out_feat = 0; out_feat < N1; out_feat++) {
+        for (int i = 0; i < TILE_H; i++) {
+            for (int j = 0; j < TILE_W; j++) {
+#pragma HLS PIPELINE II =1
+                layer1_output_tile[out_feat][i][j] = conv1_biases[out_feat];
+            }
+        }
     }
 
-   //N0 =1 so we dont even need a loop for our input features this time
-   //so basically we dont even need an input feature tile
-   //Do convolution alongside padding in this section
-   for (int feat = 0; feat < N1; feat++){
-	   for (int th = 0; th < TILE_H; th++){
-		   for (int tw = 0; tw < TILE_W; tw++){
-			   int h = th;
-			   int w = tw;
+    // Convolution with SAME padding
+    feature_loop_conv1:
+    for (int feat = 0; feat < N1; feat++) {
+    	tile_height_loop_conv1:
+        for (int th = 0; th < TILE_H; th++) {
+        	tile_width_loop_conv1:
+            for (int tw = 0; tw < TILE_W; tw++) {
+#pragma HLS PIPELINE II=1
+            	kernel_height_loop_conv1:
+                for (int kh = 0; kh < F1; kh++) {
+                	kernel_width_loop_conv1:
+                    for (int kw = 0; kw < F1; kw++) {
+#pragma HLS UNROLL FACTOR=4
+                        int pad_h = (int)fminf(fmaxf(th + kh - P, 0), TILE_H - 1);
+                        int pad_w = (int)fminf(fmaxf(tw + kw - P, 0), TILE_W - 1);
+                        layer1_output_tile[feat][th][tw] +=
+                            conv1_weights[feat][0][kh][kw] *
+                            input_tile[0][pad_h][pad_w];
+                    }
+                }
+                // ReLU
+                if (layer1_output_tile[feat][th][tw] < 0) {
+                    layer1_output_tile[feat][th][tw] = 0;
+                }
+            }
+        }
+    }
 
-			   // do padding and then do MAC
-			   //iterate over kernel height and width
-			   for (int kh = 0; kh < F1; kh++){
-				   for (int kw = 0; kw < F1; kw++){
-
-					   //do same padding with edge extension
-					   int pad_h = (int)fminf(fmaxf(h + kh - P, 0),TILE_H - 1);
-					   int pad_w = (int)fminf(fmaxf(w + kw - P, 0), TILE_W - 1);
-
-					   //perform MAC
-					   layer1_output_tile[feat][th][tw] += conv1_weights[feat][0][kh][kw] * input_tile[0][pad_h][pad_w];
-
-				   }
-			   }
-			  //activation functiion
-			  if (layer1_output_tile[feat][th][tw]<0){
-				  layer1_output_tile[feat][th][tw]= 0;
-			  }
-		   }
-	   }
-   }
-
+    // Stream out tile data (N1 x TILE_H x TILE_W)
+    STREAM_OUT_CONV1:
+    for (int feat = 0; feat < N1; feat++) {
+        for (int th = 0; th < TILE_H; th++) {
+            for (int tw = 0; tw < TILE_W; tw++) {
+                conv1_to_conv2.write(layer1_output_tile[feat][th][tw]);
+            }
+        }
+    }
 }
